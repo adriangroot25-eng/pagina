@@ -1,0 +1,149 @@
+{
+  "name": "Gestión Automática de Estados - CRON",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "cronExpression": "0 * * * *"
+            }
+          ]
+        }
+      },
+      "name": "Cron - Cada Hora",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT cita_id, estado_cita FROM citas WHERE estado_cita = 'PROGRAMADA' AND CONCAT(fecha_cita, ' ', hora_fin) < NOW()"
+      },
+      "name": "Buscar Citas Vencidas",
+      "type": "n8n-nodes-base.mysql",
+      "typeVersion": 1,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE citas SET estado_cita = 'NO_ASISTIO', fecha_ultima_modificacion = NOW() WHERE estado_cita = 'PROGRAMADA' AND CONCAT(fecha_cita, ' ', hora_fin) < NOW()"
+      },
+      "name": "Actualizar a NO_ASISTIO",
+      "type": "n8n-nodes-base.mysql",
+      "typeVersion": 1,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "name": "Loop Citas Vencidas",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [850, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO historial_estados_cita (cita_id, estado_anterior, estado_nuevo, fecha_cambio, motivo_cambio, usuario_cambio) VALUES ({{$json[\"cita_id\"]}}, 'PROGRAMADA', 'NO_ASISTIO', NOW(), 'Cita no confirmada - expiró plazo', 'sistema')"
+      },
+      "name": "Registrar Historial NO_ASISTIO",
+      "type": "n8n-nodes-base.mysql",
+      "typeVersion": 1,
+      "position": [1050, 300]
+    },
+    {
+      "parameters": {},
+      "name": "Continuar Loop",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [1250, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT cita_id, estado_cita FROM citas WHERE estado_cita = 'CONFIRMADA' AND CONCAT(fecha_cita, ' ', hora_fin) < NOW()"
+      },
+      "name": "Buscar Citas Confirmadas Finalizadas",
+      "type": "n8n-nodes-base.mysql",
+      "typeVersion": 1,
+      "position": [450, 500]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE citas SET estado_cita = 'COMPLETADA', fecha_ultima_modificacion = NOW() WHERE estado_cita = 'CONFIRMADA' AND CONCAT(fecha_cita, ' ', hora_fin) < NOW()"
+      },
+      "name": "Actualizar a COMPLETADA",
+      "type": "n8n-nodes-base.mysql",
+      "typeVersion": 1,
+      "position": [650, 500]
+    },
+    {
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "name": "Loop Citas Completadas",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [850, 500]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO historial_estados_cita (cita_id, estado_anterior, estado_nuevo, fecha_cambio, motivo_cambio, usuario_cambio) VALUES ({{$json[\"cita_id\"]}}, 'CONFIRMADA', 'COMPLETADA', NOW(), 'Cita finalizada automáticamente', 'sistema')"
+      },
+      "name": "Registrar Historial COMPLETADA",
+      "type": "n8n-nodes-base.mysql",
+      "typeVersion": 1,
+      "position": [1050, 500]
+    },
+    {
+      "parameters": {},
+      "name": "Finalizar",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [1250, 500]
+    }
+  ],
+  "connections": {
+    "Cron - Cada Hora": {
+      "main": [[{"node": "Buscar Citas Vencidas", "type": "main", "index": 0}, {"node": "Buscar Citas Confirmadas Finalizadas", "type": "main", "index": 0}]]
+    },
+    "Buscar Citas Vencidas": {
+      "main": [[{"node": "Actualizar a NO_ASISTIO", "type": "main", "index": 0}]]
+    },
+    "Actualizar a NO_ASISTIO": {
+      "main": [[{"node": "Loop Citas Vencidas", "type": "main", "index": 0}]]
+    },
+    "Loop Citas Vencidas": {
+      "main": [[{"node": "Registrar Historial NO_ASISTIO", "type": "main", "index": 0}]]
+    },
+    "Registrar Historial NO_ASISTIO": {
+      "main": [[{"node": "Continuar Loop", "type": "main", "index": 0}]]
+    },
+    "Continuar Loop": {
+      "main": [[{"node": "Loop Citas Vencidas", "type": "main", "index": 0}]]
+    },
+    "Buscar Citas Confirmadas Finalizadas": {
+      "main": [[{"node": "Actualizar a COMPLETADA", "type": "main", "index": 0}]]
+    },
+    "Actualizar a COMPLETADA": {
+      "main": [[{"node": "Loop Citas Completadas", "type": "main", "index": 0}]]
+    },
+    "Loop Citas Completadas": {
+      "main": [[{"node": "Registrar Historial COMPLETADA", "type": "main", "index": 0}]]
+    },
+    "Registrar Historial COMPLETADA": {
+      "main": [[{"node": "Finalizar", "type": "main", "index": 0}]]
+    },
+    "Finalizar": {
+      "main": [[{"node": "Loop Citas Completadas", "type": "main", "index": 0}]]
+    }
+  }
+}

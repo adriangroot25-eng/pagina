@@ -1,0 +1,143 @@
+{
+  "name": "Recordatorios Diarios - 24h Antes",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "cronExpression": "0 9 * * *"
+            }
+          ]
+        }
+      },
+      "name": "Cron - Diario 09:00",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT c.cita_id, c.paciente_id, c.fecha_cita, c.hora_inicio, c.token, c.canal_agendamiento, p.nombre as paciente_nombre, p.telefono, p.email, e.nombre as especialista_nombre, pk.nombre as paquete_nombre FROM citas c INNER JOIN pacientes p ON c.paciente_id = p.paciente_id INNER JOIN especialistas e ON c.especialista_id = e.especialista_id INNER JOIN paquetes_especialidad pk ON c.paquete_id = pk.paquete_id WHERE c.estado_cita = 'PROGRAMADA' AND c.fecha_cita = DATE_ADD(CURDATE(), INTERVAL 1 DAY) AND NOT EXISTS (SELECT 1 FROM notificaciones_enviadas WHERE cita_id = c.cita_id AND tipo_notificacion = 'recordatorio_24h')"
+      },
+      "name": "Buscar Citas para Recordar",
+      "type": "n8n-nodes-base.mysql",
+      "typeVersion": 1,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "name": "Loop Citas",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json[\"canal_agendamiento\"]}}",
+              "operation": "equals",
+              "value2": "whatsapp"
+            }
+          ]
+        }
+      },
+      "name": "IF Canal WhatsApp",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [850, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.whatsapp.com/send",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "whatsappApi",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "phone",
+              "value": "={{$json[\"telefono\"]}}"
+            },
+            {
+              "name": "message",
+              "value": "🔔 Recordatorio de Cita - Sportiva\\n\\nHola {{$json[\"paciente_nombre\"]}},\\n\\nTe recordamos tu cita para mañana:\\n\\n📅 Fecha: {{$json[\"fecha_cita\"]}}\\n🕐 Hora: {{$json[\"hora_inicio\"]}}\\n👨‍⚕️ Especialista: {{$json[\"especialista_nombre\"]}}\\n📋 Servicio: {{$json[\"paquete_nombre\"]}}\\n\\n⚠️ Por favor confirma tu asistencia:"
+            },
+            {
+              "name": "buttons",
+              "value": "=[{\"id\": \"confirmar\", \"text\": \"✅ Confirmar asistencia\"}, {\"id\": \"editar\", \"text\": \"📝 Cambiar fecha/hora\"}, {\"id\": \"cancelar\", \"text\": \"❌ Cancelar cita\"}]"
+            }
+          ]
+        }
+      },
+      "name": "Enviar WhatsApp con Botones",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [1050, 200]
+    },
+    {
+      "parameters": {
+        "operation": "sendEmail",
+        "fromEmail": "citas@sportiva.com",
+        "toEmail": "={{$json[\"email\"]}}",
+        "subject": "🔔 Recordatorio de Cita - Mañana",
+        "emailFormat": "html",
+        "text": "=<h2>🔔 Recordatorio de Cita</h2><p>Hola {{$json[\"paciente_nombre\"]}},</p><p>Te recordamos tu cita programada para <strong>mañana</strong>:</p><ul><li>📅 Fecha: {{$json[\"fecha_cita\"]}}</li><li>🕐 Hora: {{$json[\"hora_inicio\"]}}</li><li>👨‍⚕️ Especialista: {{$json[\"especialista_nombre\"]}}</li><li>📋 Servicio: {{$json[\"paquete_nombre\"]}}</li></ul><p><strong>⚠️ Por favor confirma tu asistencia:</strong></p><p><a href=\"https://sportiva.com/confirmar/{{$json[\"cita_id\"]}}/{{$json[\"token\"]}}\" style=\"background: #28a745; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;\">✅ Confirmar Asistencia</a></p><p><a href=\"https://sportiva.com/editar/{{$json[\"cita_id\"]}}/{{$json[\"token\"]}}\">📝 Cambiar Fecha/Hora</a> | <a href=\"https://sportiva.com/cancelar/{{$json[\"cita_id\"]}}/{{$json[\"token\"]}}\">❌ Cancelar Cita</a></p>"
+      },
+      "name": "Enviar Email con Enlaces",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2,
+      "position": [1050, 400]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO notificaciones_enviadas (cita_id, tipo_notificacion, canal, estado_envio, fecha_envio) VALUES ({{$json[\"cita_id\"]}}, 'recordatorio_24h', '{{$json[\"canal_agendamiento\"]}}', 'enviado', NOW())"
+      },
+      "name": "Registrar Notificación Enviada",
+      "type": "n8n-nodes-base.mysql",
+      "typeVersion": 1,
+      "position": [1250, 300]
+    },
+    {
+      "parameters": {},
+      "name": "Volver al Loop",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [1450, 300]
+    }
+  ],
+  "connections": {
+    "Cron - Diario 09:00": {
+      "main": [[{"node": "Buscar Citas para Recordar", "type": "main", "index": 0}]]
+    },
+    "Buscar Citas para Recordar": {
+      "main": [[{"node": "Loop Citas", "type": "main", "index": 0}]]
+    },
+    "Loop Citas": {
+      "main": [[{"node": "IF Canal WhatsApp", "type": "main", "index": 0}]]
+    },
+    "IF Canal WhatsApp": {
+      "main": [[{"node": "Enviar WhatsApp con Botones", "type": "main", "index": 0}], [{"node": "Enviar Email con Enlaces", "type": "main", "index": 0}]]
+    },
+    "Enviar WhatsApp con Botones": {
+      "main": [[{"node": "Registrar Notificación Enviada", "type": "main", "index": 0}]]
+    },
+    "Enviar Email con Enlaces": {
+      "main": [[{"node": "Registrar Notificación Enviada", "type": "main", "index": 0}]]
+    },
+    "Registrar Notificación Enviada": {
+      "main": [[{"node": "Volver al Loop", "type": "main", "index": 0}]]
+    },
+    "Volver al Loop": {
+      "main": [[{"node": "Loop Citas", "type": "main", "index": 0}]]
+    }
+  }
+}

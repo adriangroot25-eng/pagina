@@ -1,0 +1,181 @@
+{
+  "name": "Confirmar Cita",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "confirmar-cita",
+        "responseMode": "responseNode"
+      },
+      "name": "Webhook - Confirmar",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT estado_cita, fecha_cita, paciente_id, especialista_id FROM citas WHERE cita_id = {{$json[\"body\"][\"cita_id\"]}} AND token = '{{$json[\"body\"][\"token\"]}}'",
+        "options": {}
+      },
+      "name": "Validar Token y Estado",
+      "type": "n8n-nodes-base.mysql",
+      "typeVersion": 1,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json[\"estado_cita\"]}}",
+              "operation": "equals",
+              "value2": "PROGRAMADA"
+            }
+          ]
+        }
+      },
+      "name": "IF Estado PROGRAMADA",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const fechaCita = new Date($input.item.json.fecha_cita);\nconst hoy = new Date();\nreturn {json: {valido: fechaCita >= hoy}};"
+      },
+      "name": "Validar Fecha No Expirada",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [850, 200]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json[\"valido\"]}}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "name": "IF Fecha Válida",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1050, 200]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "START TRANSACTION;"
+      },
+      "name": "Iniciar Transacción",
+      "type": "n8n-nodes-base.mysql",
+      "typeVersion": 1,
+      "position": [1250, 100]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE citas SET estado_cita = 'CONFIRMADA', fecha_confirmacion = NOW(), fecha_ultima_modificacion = NOW(), usuario_confirma = {{$json[\"paciente_id\"]}} WHERE cita_id = {{$json[\"body\"][\"cita_id\"]}}"
+      },
+      "name": "Actualizar a CONFIRMADA",
+      "type": "n8n-nodes-base.mysql",
+      "typeVersion": 1,
+      "position": [1450, 100]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO historial_estados_cita (cita_id, estado_anterior, estado_nuevo, fecha_cambio, motivo_cambio, usuario_cambio) VALUES ({{$json[\"body\"][\"cita_id\"]}}, 'PROGRAMADA', 'CONFIRMADA', NOW(), 'Confirmación de asistencia por paciente', {{$json[\"paciente_id\"]}})"
+      },
+      "name": "Registrar en Historial",
+      "type": "n8n-nodes-base.mysql",
+      "typeVersion": 1,
+      "position": [1650, 100]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "COMMIT;"
+      },
+      "name": "Commit",
+      "type": "n8n-nodes-base.mysql",
+      "typeVersion": 1,
+      "position": [1850, 100]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO notificaciones_especialista (especialista_id, cita_id, tipo_notificacion, estado) VALUES ({{$json[\"especialista_id\"]}}, {{$json[\"body\"][\"cita_id\"]}}, 'cita_confirmada', 'pendiente_lectura')"
+      },
+      "name": "Notificar Especialista",
+      "type": "n8n-nodes-base.mysql",
+      "typeVersion": 1,
+      "position": [2050, 100]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\"success\": true, \"mensaje\": \"✅ Tu cita ha sido CONFIRMADA. Ya no podrás modificar fecha u hora.\", \"estado\": \"CONFIRMADA\"}"
+      },
+      "name": "Response Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [2250, 100]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\"success\": false, \"mensaje\": \"Esta cita ya fue procesada anteriormente\"}"
+      },
+      "name": "Response Ya Procesada",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [850, 400]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\"success\": false, \"mensaje\": \"Esta cita ya expiró\"}"
+      },
+      "name": "Response Expirada",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1250, 300]
+    }
+  ],
+  "connections": {
+    "Webhook - Confirmar": {
+      "main": [[{"node": "Validar Token y Estado", "type": "main", "index": 0}]]
+    },
+    "Validar Token y Estado": {
+      "main": [[{"node": "IF Estado PROGRAMADA", "type": "main", "index": 0}]]
+    },
+    "IF Estado PROGRAMADA": {
+      "main": [[{"node": "Validar Fecha No Expirada", "type": "main", "index": 0}], [{"node": "Response Ya Procesada", "type": "main", "index": 0}]]
+    },
+    "Validar Fecha No Expirada": {
+      "main": [[{"node": "IF Fecha Válida", "type": "main", "index": 0}]]
+    },
+    "IF Fecha Válida": {
+      "main": [[{"node": "Iniciar Transacción", "type": "main", "index": 0}], [{"node": "Response Expirada", "type": "main", "index": 0}]]
+    },
+    "Iniciar Transacción": {
+      "main": [[{"node": "Actualizar a CONFIRMADA", "type": "main", "index": 0}]]
+    },
+    "Actualizar a CONFIRMADA": {
+      "main": [[{"node": "Registrar en Historial", "type": "main", "index": 0}]]
+    },
+    "Registrar en Historial": {
+      "main": [[{"node": "Commit", "type": "main", "index": 0}]]
+    },
+    "Commit": {
+      "main": [[{"node": "Notificar Especialista", "type": "main", "index": 0}]]
+    },
+    "Notificar Especialista": {
+      "main": [[{"node": "Response Success", "type": "main", "index": 0}]]
+    }
+  }
+}

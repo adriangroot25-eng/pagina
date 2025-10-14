@@ -1,0 +1,360 @@
+{
+  "name": "Sistema Agendamiento Citas - Workflow Principal",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "agendar-cita",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "name": "Webhook - Agendar Cita",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300],
+      "webhookId": "agendar-cita-webhook"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json[\"body\"][\"canal\"]}}",
+              "operation": "equals",
+              "value2": "whatsapp"
+            }
+          ]
+        }
+      },
+      "name": "IF Canal WhatsApp",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO log_interacciones (canal, timestamp, session_id) VALUES ('{{$json[\"body\"][\"canal\"]}}', NOW(), '{{$json[\"body\"][\"session_id\"]}}')",
+        "options": {}
+      },
+      "name": "Log Interacción",
+      "type": "n8n-nodes-base.mysql",
+      "typeVersion": 1,
+      "position": [650, 300],
+      "credentials": {
+        "mysql": {
+          "id": "1",
+          "name": "MySQL Sportiva"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT telefono, nombre, email FROM pacientes WHERE telefono = '{{$json[\"body\"][\"telefono\"]}}'",
+        "options": {}
+      },
+      "name": "Verificar Paciente Existente",
+      "type": "n8n-nodes-base.mysql",
+      "typeVersion": 1,
+      "position": [850, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{$json[\"length\"]}}",
+              "operation": "larger",
+              "value2": 0
+            }
+          ]
+        }
+      },
+      "name": "IF Paciente Existe",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1050, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE pacientes SET nombre = '{{$json[\"body\"][\"nombre\"]}}', email = '{{$json[\"body\"][\"email\"]}}', direccion = '{{$json[\"body\"][\"direccion\"]}}', ciudad = '{{$json[\"body\"][\"ciudad\"]}}', estado = '{{$json[\"body\"][\"estado\"]}}', codigo_postal = '{{$json[\"body\"][\"codigo_postal\"]}}', fecha_actualizacion = NOW() WHERE telefono = '{{$json[\"body\"][\"telefono\"]}}'",
+        "options": {}
+      },
+      "name": "Actualizar Paciente",
+      "type": "n8n-nodes-base.mysql",
+      "typeVersion": 1,
+      "position": [1250, 200]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO pacientes (nombre, email, telefono, fecha_nacimiento, genero, direccion, ciudad, estado, codigo_postal, fecha_registro, estado_paciente) VALUES ('{{$json[\"body\"][\"nombre\"]}}', '{{$json[\"body\"][\"email\"]}}', '{{$json[\"body\"][\"telefono\"]}}', '{{$json[\"body\"][\"fecha_nacimiento\"]}}', '{{$json[\"body\"][\"genero\"]}}', '{{$json[\"body\"][\"direccion\"]}}', '{{$json[\"body\"][\"ciudad\"]}}', '{{$json[\"body\"][\"estado\"]}}', '{{$json[\"body\"][\"codigo_postal\"]}}', NOW(), 'activo')",
+        "options": {}
+      },
+      "name": "Crear Nuevo Paciente",
+      "type": "n8n-nodes-base.mysql",
+      "typeVersion": 1,
+      "position": [1250, 400]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT fecha, hora_inicio, hora_fin FROM horarios_disponibles WHERE especialista_id = {{$json[\"body\"][\"especialista_id\"]}} AND fecha >= CURDATE() AND estado_slot = 'disponible' ORDER BY fecha, hora_inicio",
+        "options": {}
+      },
+      "name": "Consultar Disponibilidad",
+      "type": "n8n-nodes-base.mysql",
+      "typeVersion": 1,
+      "position": [1450, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "START TRANSACTION; SELECT estado_slot FROM horarios_disponibles WHERE especialista_id = {{$json[\"body\"][\"especialista_id\"]}} AND fecha = '{{$json[\"body\"][\"fecha\"]}}' AND hora_inicio = '{{$json[\"body\"][\"hora\"]}}' FOR UPDATE;",
+        "options": {}
+      },
+      "name": "Bloqueo Atómico - Verificar",
+      "type": "n8n-nodes-base.mysql",
+      "typeVersion": 1,
+      "position": [1650, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json[\"estado_slot\"]}}",
+              "operation": "equals",
+              "value2": "disponible"
+            }
+          ]
+        }
+      },
+      "name": "IF Slot Disponible",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1850, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO citas (paciente_id, especialista_id, paquete_id, fecha_cita, hora_inicio, hora_fin, motivo_consulta, sintomas_previos, estado_cita, canal_agendamiento, fecha_creacion, fecha_ultima_modificacion, token) VALUES ({{$json[\"paciente_id\"]}}, {{$json[\"body\"][\"especialista_id\"]}}, {{$json[\"body\"][\"paquete_id\"]}}, '{{$json[\"body\"][\"fecha\"]}}', '{{$json[\"body\"][\"hora\"]}}', ADDTIME('{{$json[\"body\"][\"hora\"]}}', '{{$json[\"duracion\"]}}:00'), '{{$json[\"body\"][\"motivo\"]}}', '{{$json[\"body\"][\"sintomas\"]}}', 'PROGRAMADA', '{{$json[\"body\"][\"canal\"]}}', NOW(), NOW(), UUID())",
+        "options": {}
+      },
+      "name": "Crear Cita",
+      "type": "n8n-nodes-base.mysql",
+      "typeVersion": 1,
+      "position": [2050, 200]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE horarios_disponibles SET estado_slot = 'reservado', cita_id = {{$json[\"insertId\"]}}, fecha_reserva = NOW() WHERE especialista_id = {{$json[\"body\"][\"especialista_id\"]}} AND fecha = '{{$json[\"body\"][\"fecha\"]}}' AND hora_inicio = '{{$json[\"body\"][\"hora\"]}}'",
+        "options": {}
+      },
+      "name": "Actualizar Slot",
+      "type": "n8n-nodes-base.mysql",
+      "typeVersion": 1,
+      "position": [2250, 200]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO historial_estados_cita (cita_id, estado_anterior, estado_nuevo, fecha_cambio, motivo_cambio, usuario_cambio) VALUES ({{$json[\"insertId\"]}}, NULL, 'PROGRAMADA', NOW(), 'Agendamiento inicial', {{$json[\"paciente_id\"]}})",
+        "options": {}
+      },
+      "name": "Registrar Historial",
+      "type": "n8n-nodes-base.mysql",
+      "typeVersion": 1,
+      "position": [2450, 200]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "COMMIT;",
+        "options": {}
+      },
+      "name": "Commit Transacción",
+      "type": "n8n-nodes-base.mysql",
+      "typeVersion": 1,
+      "position": [2650, 200]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json[\"body\"][\"canal\"]}}",
+              "operation": "equals",
+              "value2": "whatsapp"
+            }
+          ]
+        }
+      },
+      "name": "IF Notificar WhatsApp",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [2850, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.whatsapp.com/send",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "whatsappApi",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "phone",
+              "value": "={{$json[\"body\"][\"telefono\"]}}"
+            },
+            {
+              "name": "message",
+              "value": "✅ Cita agendada exitosamente\\n\\n📋 ID: {{$json[\"cita_id\"]}}\\n📅 Fecha: {{$json[\"body\"][\"fecha\"]}}\\n🕐 Hora: {{$json[\"body\"][\"hora\"]}}\\n👨‍⚕️ Especialidad: {{$json[\"paquete_nombre\"]}}\\n\\n⚠️ IMPORTANTE:\\n- Recibirás un recordatorio 24 horas antes\\n- Deberás CONFIRMAR tu asistencia\\n- Puedes modificar mientras esté PROGRAMADA"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Enviar WhatsApp Confirmación",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [3050, 100]
+    },
+    {
+      "parameters": {
+        "operation": "sendEmail",
+        "fromEmail": "citas@sportiva.com",
+        "toEmail": "={{$json[\"body\"][\"email\"]}}",
+        "subject": "Confirmación de Cita - Sportiva",
+        "emailFormat": "html",
+        "text": "<h2>✅ Cita Agendada</h2><p>Hola {{$json[\"body\"][\"nombre\"]}},</p><p>Tu cita ha sido agendada exitosamente:</p><ul><li>ID: {{$json[\"cita_id\"]}}</li><li>Fecha: {{$json[\"body\"][\"fecha\"]}}</li><li>Hora: {{$json[\"body\"][\"hora\"]}}</li><li>Especialidad: {{$json[\"paquete_nombre\"]}}</li></ul>",
+        "options": {}
+      },
+      "name": "Enviar Email Confirmación",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2,
+      "position": [3050, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO notificaciones_enviadas (cita_id, tipo_notificacion, canal, estado_envio, fecha_envio) VALUES ({{$json[\"cita_id\"]}}, 'confirmacion_agendamiento', '{{$json[\"body\"][\"canal\"]}}', 'enviado', NOW())",
+        "options": {}
+      },
+      "name": "Registrar Notificación",
+      "type": "n8n-nodes-base.mysql",
+      "typeVersion": 1,
+      "position": [3250, 200]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO notificaciones_especialista (especialista_id, cita_id, tipo_notificacion, estado, fecha_creacion) VALUES ({{$json[\"body\"][\"especialista_id\"]}}, {{$json[\"cita_id\"]}}, 'nueva_cita', 'pendiente_lectura', NOW())",
+        "options": {}
+      },
+      "name": "Notificar Especialista",
+      "type": "n8n-nodes-base.mysql",
+      "typeVersion": 1,
+      "position": [3450, 200]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\"success\": true, \"cita_id\": {{$json[\"cita_id\"]}}, \"mensaje\": \"Cita agendada exitosamente\", \"estado\": \"PROGRAMADA\"}",
+        "options": {}
+      },
+      "name": "Response Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [3650, 200]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "ROLLBACK;",
+        "options": {}
+      },
+      "name": "Rollback - Slot Ocupado",
+      "type": "n8n-nodes-base.mysql",
+      "typeVersion": 1,
+      "position": [2050, 400]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\"success\": false, \"mensaje\": \"Este horario acaba de ser reservado\", \"horarios_alternativos\": {{$json[\"alternativas\"]}}}",
+        "options": {}
+      },
+      "name": "Response Slot Ocupado",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [2250, 400]
+    }
+  ],
+  "connections": {
+    "Webhook - Agendar Cita": {
+      "main": [[{"node": "IF Canal WhatsApp", "type": "main", "index": 0}]]
+    },
+    "IF Canal WhatsApp": {
+      "main": [[{"node": "Log Interacción", "type": "main", "index": 0}], [{"node": "Log Interacción", "type": "main", "index": 0}]]
+    },
+    "Log Interacción": {
+      "main": [[{"node": "Verificar Paciente Existente", "type": "main", "index": 0}]]
+    },
+    "Verificar Paciente Existente": {
+      "main": [[{"node": "IF Paciente Existe", "type": "main", "index": 0}]]
+    },
+    "IF Paciente Existe": {
+      "main": [[{"node": "Actualizar Paciente", "type": "main", "index": 0}], [{"node": "Crear Nuevo Paciente", "type": "main", "index": 0}]]
+    },
+    "Actualizar Paciente": {
+      "main": [[{"node": "Consultar Disponibilidad", "type": "main", "index": 0}]]
+    },
+    "Crear Nuevo Paciente": {
+      "main": [[{"node": "Consultar Disponibilidad", "type": "main", "index": 0}]]
+    },
+    "Consultar Disponibilidad": {
+      "main": [[{"node": "Bloqueo Atómico - Verificar", "type": "main", "index": 0}]]
+    },
+    "Bloqueo Atómico - Verificar": {
+      "main": [[{"node": "IF Slot Disponible", "type": "main", "index": 0}]]
+    },
+    "IF Slot Disponible": {
+      "main": [[{"node": "Crear Cita", "type": "main", "index": 0}], [{"node": "Rollback - Slot Ocupado", "type": "main", "index": 0}]]
+    },
+    "Crear Cita": {
+      "main": [[{"node": "Actualizar Slot", "type": "main", "index": 0}]]
+    },
+    "Actualizar Slot": {
+      "main": [[{"node": "Registrar Historial", "type": "main", "index": 0}]]
+    },
+    "Registrar Historial": {
+      "main": [[{"node": "Commit Transacción", "type": "main", "index": 0}]]
+    },
+    "Commit Transacción": {
+      "main": [[{"node": "IF Notificar WhatsApp", "type": "main", "index": 0}]]
+    },
+    "IF Notificar WhatsApp": {
+      "main": [[{"node": "Enviar WhatsApp Confirmación", "type": "main", "index": 0}], [{"node": "Enviar Email Confirmación", "type": "main", "index": 0}]]
+    },
+    "Enviar WhatsApp Confirmación": {
+      "main": [[{"node": "Registrar Notificación", "type": "main", "index": 0}]]
+    },
+    "Enviar Email Confirmación": {
+      "main": [[{"node": "Registrar Notificación", "type": "main", "index": 0}]]
+    },
+    "Registrar Notificación": {
+      "main": [[{"node": "Notificar Especialista", "type": "main", "index": 0}]]
+    },
+    "Notificar Especialista": {
+      "main": [[{"node": "Response Success", "type": "main", "index": 0}]]
+    },
+    "Rollback - Slot Ocupado": {
+      "main": [[{"node": "Response Slot Ocupado", "type": "main", "index": 0}]]
+    }
+  }
+}
