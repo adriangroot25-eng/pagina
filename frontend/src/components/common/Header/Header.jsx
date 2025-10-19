@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Menu, X, User } from 'lucide-react'
-import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { NAVIGATION_ITEMS } from '../../../utils/constants'
 import { scrollToSection } from '../../../utils/helpers'
 import logo from '../../../assets/logo.png'
@@ -62,8 +62,9 @@ function Header() {
   }
 
   const handleAppointment = () => {
-    // Redirigir a la página de reservaciones
+    // Navegar a la página de reservaciones
     navigate('/reservaciones')
+    closeMenu()
   }
 
   // Componente para enlaces de navegación

@@ -1,12 +1,8 @@
+import { useNavigate } from 'react-router-dom';
 import FloatingElements from './FloatingElements';
 
 const Hero = () => {
-  const scrollToSection = (sectionId) => {
-    const element = document.getElementById(sectionId);
-    if (element) {
-      element.scrollIntoView({ behavior: 'smooth' });
-    }
-  };
+  const navigate = useNavigate();
 
   return (
     <section 
@@ -41,8 +37,8 @@ const Hero = () => {
           Centro Integral Deportivo
         </p>
         
-        <button 
-          onClick={() => window.location.href = '/reservaciones'}
+        <button
+          onClick={() => navigate('/reservaciones')}
           className="btn-primary px-10 py-4 text-white rounded-full text-lg font-semibold shadow-2xl animate-fade-in-up animation-delay-900 hover-scale"
         >
           Agenda aquí
