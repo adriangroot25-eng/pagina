@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import PackagesSection from '../components/sections/Reservations/PackagesSection'
-import ReservationForm from '../components/forms/ReservationForm/ReservationForm'
+import SimpleReservationForm from '../components/forms/SimpleReservationForm'
 
 const Reservations = () => {
   const [selectedPackage, setSelectedPackage] = useState(null)
@@ -13,10 +13,18 @@ const Reservations = () => {
 
   const handlePackageSelect = (pkg) => {
     setSelectedPackage(pkg)
-    // Mostrar el formulario después de seleccionar paquete
+    setShowForm(true)
+
+    // Scroll suave hacia el formulario después de que se renderice
     setTimeout(() => {
-      setShowForm(true)
-    }, 500)
+      const element = document.getElementById("reservation-form")
+      if (element) {
+        element.scrollIntoView({
+          behavior: "smooth",
+          block: "start"
+        })
+      }
+    }, 100)
   }
 
   return (
@@ -30,8 +38,8 @@ const Reservations = () => {
 
       {/* Formulario de reserva */}
       {showForm && selectedPackage && (
-        <div id="reservation-form">
-          <ReservationForm 
+        <div id="reservation-form" className="py-12">
+          <SimpleReservationForm
             selectedPackage={selectedPackage}
             onBack={() => {
               setShowForm(false)

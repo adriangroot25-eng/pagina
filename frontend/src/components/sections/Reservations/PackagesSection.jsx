@@ -1,75 +1,23 @@
 import { useState, useEffect } from "react";
-import { ArrowRight, Shield, Clock, Star, ChevronDown } from "lucide-react";
+import { Shield, Clock, Star } from "lucide-react";
 import PackageCard from "./PackageCard";
 import { CONSULTATION_PACKAGES } from "../../../utils/constants";
-import { getPaquetesEspecialidad } from "../../../utils/supabaseClient";
+import { WHATSAPP_CONFIG } from "../../../config/whatsapp";
 
 const PackagesSection = ({ onPackageSelect, selectedPackage }) => {
   const [hoveredPackage, setHoveredPackage] = useState(null);
-  const [isScrolling, setIsScrolling] = useState(false);
   const [packages, setPackages] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    const fetchPackages = async () => {
-      try {
-        setLoading(true);
-        const data = await getPaquetesEspecialidad();
-        
-        const formattedPackages = data.map(pkg => ({
-          id: pkg.paquete_id,
-          title: pkg.nombre,
-          description: pkg.descripcion || "Consulta especializada",
-          price: pkg.precio,
-          duration: pkg.duracion_minutos,
-          features: [
-            `Duración: ${pkg.duracion_minutos} minutos`,
-            "Atención personalizada",
-            "Especialistas certificados"
-          ],
-          customizable: false,
-          color: "blue"
-        }));
-        
-        setPackages(formattedPackages);
-      } catch (err) {
-        console.error("Error al cargar paquetes:", err);
-        setError("No se pudieron cargar los paquetes. Por favor, intenta de nuevo más tarde.");
-        setPackages(CONSULTATION_PACKAGES);
-      } finally {
-        setLoading(false);
-      }
-    };
-    
-    fetchPackages();
+    // Usar datos locales directamente (sin Supabase)
+    setPackages(CONSULTATION_PACKAGES);
+    setLoading(false);
   }, []);
 
   const handlePackageSelect = (pkg) => {
     onPackageSelect(pkg);
-    
-    setIsScrolling(true);
-    setTimeout(() => {
-      const element = document.getElementById("reservation-form");
-      if (element) {
-        element.scrollIntoView({ 
-          behavior: "smooth",
-          block: "start",
-          inline: "nearest"
-        });
-        
-        setTimeout(() => setIsScrolling(false), 1000);
-      }
-    }, 300);
-  };
-
-  const proceedToForm = () => {
-    if (selectedPackage) {
-      const element = document.getElementById("reservation-form");
-      if (element) {
-        element.scrollIntoView({ behavior: "smooth" });
-      }
-    }
   };
 
   return (
@@ -173,34 +121,6 @@ const PackagesSection = ({ onPackageSelect, selectedPackage }) => {
           ))}
         </div>
 
-        {selectedPackage && !isScrolling && (
-          <div className="text-center mb-8 animate-fade-in-up">
-            <div className="inline-flex flex-col items-center">
-              <p className="text-green-600 font-semibold mb-2">
-                Paquete seleccionado: {selectedPackage.title}
-              </p>
-              <button
-                onClick={proceedToForm}
-                className="inline-flex items-center px-8 py-4 bg-gradient-to-r from-green-600 to-blue-600 hover:from-green-700 hover:to-blue-700 text-white rounded-full font-semibold text-lg transition-all duration-300 hover:scale-105 shadow-2xl animate-pulse"
-              >
-                Continuar con el formulario
-                <ArrowRight className="ml-2 w-6 h-6" />
-              </button>
-              <div className="mt-2 animate-bounce">
-                <ChevronDown className="w-6 h-6 text-green-600" />
-              </div>
-            </div>
-          </div>
-        )}
-
-        {isScrolling && (
-          <div className="text-center mb-8">
-            <div className="inline-flex items-center px-6 py-3 bg-green-100 rounded-full">
-              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-green-600 mr-3"></div>
-              <span className="text-green-600 font-semibold">Desplazándose al formulario...</span>
-            </div>
-          </div>
-        )}
 
         <div className="mt-20 bg-white rounded-3xl shadow-xl p-8 lg:p-12 animate-fade-in-up animation-delay-800">
           <div className="text-center">
@@ -213,17 +133,19 @@ const PackagesSection = ({ onPackageSelect, selectedPackage }) => {
             </p>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-lg mx-auto">
               <a
-                href="tel:+525551234567"
+                href={`tel:+${WHATSAPP_CONFIG.clinicNumber}`}
                 className="flex items-center justify-center p-4 bg-green-50 rounded-xl hover:bg-green-100 transition-colors"
               >
                 <div className="text-center">
                   <div className="text-2xl font-bold text-green-600">Llámanos</div>
-                  <div className="text-gray-600">(555) 123-4567</div>
+                  <div className="text-gray-600">
+                    {WHATSAPP_CONFIG.clinicNumber.replace(/^52/, '').replace(/(\d{2})(\d{4})(\d{4})/, '($1) $2-$3')}
+                  </div>
                 </div>
               </a>
-              
+
               <a
-                href="https://wa.me/5215551234567?text=Hola,%20necesito%20ayuda%20para%20elegir%20un%20paquete%20de%20consulta"
+                href={`https://wa.me/${WHATSAPP_CONFIG.clinicNumber}?text=${encodeURIComponent(WHATSAPP_CONFIG.welcomeMessage)}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center justify-center p-4 bg-blue-50 rounded-xl hover:bg-blue-100 transition-colors"
