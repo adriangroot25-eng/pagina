@@ -132,7 +132,7 @@ const SimpleReservationForm = ({ selectedPackage, onBack }) => {
     // NUEVO CÓDIGO PARA LLAMAR AL WEBHOOK DE N8N
     const datosFormulario = {
       nombre: formData.nombre,
-      telefono: `+52${formData.telefono.replace(/\s/g, '')}`, // Asume México (+52)
+      telefono: `+521${formData.telefono.replace(/\s/g, '')}`, // <-- CORRECTO
       email: formData.email,
       tipo_servicio: selectedPackage.name,
       fecha: formData.fecha, // Formato AAAA-MM-DD
